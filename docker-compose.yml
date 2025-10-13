@@ -1,0 +1,53 @@
+services:
+  expenses.app.api:
+    image: ${DOCKER_REGISTRY-}expensesappapi
+    container_name: ExpensesApp.Api
+    build:
+      context: .
+      dockerfile: Expenses.App.API/Dockerfile
+    ports:
+       - 5000:8080
+       - 5001:8081 
+    environment: 
+      #seq
+       
+      # - OTEL_EXPORTER_OTLP_ENDPOINT=http://mvcapp.seq:5341/ingest/otlp
+      # - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      
+      # Aspire Dashboard
+
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://expenses.app.aspire-dashboard:18889
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+
+
+  expenses.app.postgres: 
+      image: postgres:17.2 # or latest
+      container_name: ExpensesApp.Database
+      environment: 
+        POSTGRES_DB: expensesapp
+        POSTGRES_USER: agungrosyandi
+        POSTGRES_PASSWORD: Agung_rosyandi123
+      volumes:
+        - ./.containers/expenses_data:/var/lib/postgresql/data
+      ports:
+        - 5436:5432  
+
+
+  # mvcapp.seq:
+  #   image: datalust/seq:2024.3 or latest
+  #   environment:
+  #       ACCEPT_EULA: "Y"
+  #   volumes:
+  #       - ./.containers/seq_data:/data
+  #   ports:
+  #       - 8080:80
+  #       - 5341:5341 
+
+
+  expenses.app.aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:9.0
+    container_name: Expenses.App.Aspire.Dashboard
+    environment:
+        DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: true
+    ports:
+        - 18888:18888     

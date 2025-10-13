@@ -1,112 +1,170 @@
-﻿using System;
-using System.Globalization;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
-using Expenses.App.API.Data;
-using Expenses.App.API.Dtos.auth;
+﻿using Expenses.App.API.Database;
+using Expenses.App.API.Dtos.Auth;
+using Expenses.App.API.Dtos.Users;
+using Expenses.App.API.Entities;
 using Expenses.App.API.Models;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Expenses.App.API.Services;
+using Expenses.App.API.Settings;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Cors;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
+using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Options;
 
 namespace Expenses.App.API.Controllers;
 
-[Route("api/[controller]")]
 [ApiController]
-[EnableCors("AllowAll")]
-public class AuthController : ControllerBase
+[Route("auth")]
+[AllowAnonymous]
+public sealed class AuthController(
+    UserManager<IdentityUser> userManager,
+    ApplicationIdentityDbContext identityDbContext,
+    ApplicationDbContext applicationDbContext,
+    TokenProvider tokenProvider,
+    IOptions<JwtAuthOptions> options) : ControllerBase
 {
-    private readonly AppDbContext _context;
-    private readonly PasswordHasher<User> _passwordHasher;
-    private readonly IConfiguration _config;
+    // REGISTER -------------------------------------------------------------------
 
-    public AuthController(AppDbContext context, PasswordHasher<User> passwordHasher, IConfiguration config)
+    private readonly JwtAuthOptions _jwtAuthOptions = options.Value;
+
+    [HttpPost("register")]
+    public async Task<ActionResult<AccessTokenDto>> Register(RegisterUserDto registerUserDto)
     {
-        _context = context;
-        _passwordHasher = passwordHasher;
-        _config = config;
-    }
+        // Integrate database with same connections ------------------------
 
-    [HttpPost("Register")]
-    public async Task<IActionResult> Register([FromBody] PostRegisterUserDto payload)
-    {
-        if (await _context.Users.AnyAsync(n => n.Email == payload.Email))
+        using IDbContextTransaction transaction = await identityDbContext.Database.BeginTransactionAsync();
+
+        applicationDbContext.Database.SetDbConnection(identityDbContext.Database.GetDbConnection());
+
+        await applicationDbContext.Database.UseTransactionAsync(transaction.GetDbTransaction());
+
+        // create identity user by DTO -----------------------
+
+        var identityUser = new IdentityUser
         {
-            return BadRequest(new { message = "The Email is already taken" });
-        }
-
-        var hashPassword = _passwordHasher.HashPassword(new User(), payload.Password);
-
-        var newUser = new User()
-        {
-            Name = payload.Name,
-            Email = payload.Email,
-            Password = hashPassword, // hashed password
-            CreateAt = DateTime.UtcNow,
-            UpdateAt = DateTime.UtcNow
+            Email = registerUserDto.Email,
+            UserName = registerUserDto.Name
         };
 
-        await _context.Users.AddAsync(newUser);
-        await _context.SaveChangesAsync();
+        IdentityResult createUserResult = await userManager.CreateAsync(identityUser, registerUserDto.Password);
 
-        var token = GenerateJwtToken(newUser);
-
-        return Ok(new { Token = token, message = "Register Berhasil" });
-    }
-
-    [HttpPost("Login")]
-    public async Task<IActionResult> Login([FromBody] PostLoginUserDto payload)
-    {
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == payload.Email);
-
-        if (user == null)
+        if (!createUserResult.Succeeded)
         {
-            return Unauthorized(new { message = "Invalid Credential" });
+            var extensions = new Dictionary<string, object?> { { "errors", createUserResult.Errors.ToDictionary(e => e.Code, e => e.Description) } };
+
+            return Problem(detail: "Unable to register user, please try again",
+                           statusCode: StatusCodes.Status400BadRequest,
+                           extensions: extensions);
         }
 
-        var result = _passwordHasher.VerifyHashedPassword(user, user.Password, payload.Password);
+        IdentityResult addToRoleResult = await userManager.AddToRoleAsync(identityUser, Roles.Member);
 
-        if (result == PasswordVerificationResult.Failed)
+        if (!addToRoleResult.Succeeded)
         {
-            return Unauthorized(new { message = "Invalid Credential" });
+            var extensions = new Dictionary<string, object?> { { "errors", addToRoleResult.Errors.ToDictionary(e => e.Code, e => e.Description) } };
+
+            return Problem(detail: "Unable to register user, please try again",
+                           statusCode: StatusCodes.Status400BadRequest,
+                           extensions: extensions);
         }
 
-        var token = GenerateJwtToken(user);
+        // Integrate with Mapping UserDto and User Entity  -----------------------
 
-        return Ok(new { Token = token, message = "login Berhasil" });
-    }
+        User user = registerUserDto.ToEntity();
 
-    // jwt token ------------------------------------
+        user.IdentityId = identityUser.Id;
 
-    private string GenerateJwtToken(User user)
-    {
-        var claims = new[]
+        applicationDbContext.Users.Add(user);
+
+        await applicationDbContext.SaveChangesAsync();
+
+        // Add Token ----------------------
+
+        var tokenRequest = new TokenRequest(identityUser.Id, identityUser.Email, [Roles.Member]);
+
+        AccessTokenDto accessTokens = tokenProvider.Create(tokenRequest);
+
+        var requestToken = new RefreshToken
         {
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString(CultureInfo.InvariantCulture)),
-            new Claim(ClaimTypes.Email, user.Email),
+            Id = Guid.CreateVersion7(),
+            UserId = identityUser.Id,
+            Token = accessTokens.RefreshToken,
+            ExpiresAtUtc = DateTime.UtcNow.AddDays(_jwtAuthOptions.RefreshTokenExpirationDays)
         };
 
-        // pull secret key from appsettings.json
+        identityDbContext.RefreshTokens.Add(requestToken);
 
-        var secretKey = _config["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured");
+        await identityDbContext.SaveChangesAsync();
 
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
-        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+        await transaction.CommitAsync();
 
-        var token = new JwtSecurityToken(
-            issuer: _config["Jwt:Issuer"],
-            audience: _config["Jwt:Audience"],
-            claims: claims,
-            expires: DateTime.UtcNow.AddHours(1),
-            signingCredentials: creds
-        );
+        return Ok(accessTokens);
+    }
 
-        return new JwtSecurityTokenHandler().WriteToken(token);
+    // LOGIN -------------------------------------------------------------------
+
+    [HttpPost("login")]
+    public async Task<ActionResult<AccessTokenDto>> Login(LoginUserDto loginUserDto)
+    {
+        IdentityUser identityUser = await userManager.FindByEmailAsync(loginUserDto.Email);
+
+        if (identityUser is null || !await userManager.CheckPasswordAsync(identityUser, loginUserDto.Password))
+        {
+            return Unauthorized();
+        }
+
+        IList<string> roles = await userManager.GetRolesAsync(identityUser);
+
+        var tokenRequest = new TokenRequest(identityUser.Id, identityUser.Email!, roles);
+
+        AccessTokenDto accessTokens = tokenProvider.Create(tokenRequest);
+
+        var requestToken = new RefreshToken
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = identityUser.Id,
+            Token = accessTokens.RefreshToken,
+            ExpiresAtUtc = DateTime.UtcNow.AddDays(_jwtAuthOptions.RefreshTokenExpirationDays)
+        };
+
+        identityDbContext.RefreshTokens.Add(requestToken);
+
+        await identityDbContext.SaveChangesAsync();
+
+        return Ok(accessTokens);
+    }
+
+    // REFRESH TOKEN -------------------------------------------------------------------
+
+    [HttpPost("refresh")]
+    public async Task<ActionResult<AccessTokenDto>> Refresh(RefreshTokenDto refreshTokenDto)
+    {
+        RefreshToken? refreshToken = await identityDbContext.RefreshTokens
+                                            .Include(rt => rt.User)
+                                            .FirstOrDefaultAsync(rt => rt.Token == refreshTokenDto.RefreshToken);
+
+        if (refreshToken is null)
+        {
+            return Unauthorized();
+        }
+
+        if (refreshToken.ExpiresAtUtc < DateTime.UtcNow)
+        {
+            return Unauthorized();
+        }
+
+        IList<string> roles = await userManager.GetRolesAsync(refreshToken.User);
+
+        var tokenRequest = new TokenRequest(refreshToken.User.Id, refreshToken.User.Email!, roles);
+
+        AccessTokenDto accessTokens = tokenProvider.Create(tokenRequest);
+
+        refreshToken.Token = accessTokens.RefreshToken;
+        refreshToken.ExpiresAtUtc = DateTime.UtcNow.AddDays(_jwtAuthOptions.RefreshTokenExpirationDays);
+
+        await identityDbContext.SaveChangesAsync();
+
+        return Ok(accessTokens);
     }
 }

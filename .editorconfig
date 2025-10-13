@@ -69,6 +69,7 @@ csharp_style_expression_bodied_accessors = true:error
 csharp_style_expression_bodied_lambdas = true:none
 csharp_style_expression_bodied_local_functions = true:error
 csharp_prefer_system_threading_lock = true:suggestion
+csharp_space_around_binary_operators = before_and_after
 
 [*.{cs,vb}]
 dotnet_style_prefer_simplified_boolean_expressions = true:suggestion
