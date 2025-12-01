@@ -11,12 +11,11 @@ namespace Expenses.App.API.Database.Migrations.Application
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql(
-                """
-                DELETE FROM expenses_app.categories;
-                DELETE FROM expenses_app.tags;
-                DELETE FROM expenses_app.category_tags;
-                """);
+            migrationBuilder.Sql("""
+                                DELETE FROM expenses_app.category_tags;
+                                DELETE FROM expenses_app.tags;
+                                DELETE FROM expenses_app.categories;
+                                """);
 
             migrationBuilder.AlterColumn<string>(
                 name: "description",

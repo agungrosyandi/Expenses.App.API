@@ -8,8 +8,12 @@ public class TagConfiguration : IEntityTypeConfiguration<Tag>
 {
     public void Configure(EntityTypeBuilder<Tag> builder)
     {
+        // primary key
+
         builder.HasKey(t => t.Id);
         builder.Property(t => t.Id).HasMaxLength(500);
+
+        // -------------------------------------------------------
 
         builder.Property(t => t.Name)
                .IsRequired()
@@ -18,6 +22,11 @@ public class TagConfiguration : IEntityTypeConfiguration<Tag>
         builder.Property(t => t.Description).HasMaxLength(500);
 
         builder.HasIndex(t => new { t.UserId, t.Name }).IsUnique();
+
+        // foreign key
+
+        builder.Property(t => t.UserId)
+               .HasMaxLength(500);
 
         // relations map
 

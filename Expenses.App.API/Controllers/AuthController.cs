@@ -1,5 +1,6 @@
 ﻿using Expenses.App.API.Database;
 using Expenses.App.API.Dtos.Auth;
+using Expenses.App.API.Dtos.Token;
 using Expenses.App.API.Dtos.Users;
 using Expenses.App.API.Entities;
 using Expenses.App.API.Models;
@@ -57,6 +58,8 @@ public sealed class AuthController(
                            statusCode: StatusCodes.Status400BadRequest,
                            extensions: extensions);
         }
+
+        // create role user by DTO -----------------------
 
         IdentityResult addToRoleResult = await userManager.AddToRoleAsync(identityUser, Roles.Member);
 

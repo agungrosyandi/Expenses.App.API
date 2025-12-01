@@ -17,27 +17,24 @@ public sealed class CategoryTagController(ApplicationDbContext dbContext) : Cont
     public async Task<ActionResult> UpsertCategoryTag(string categoryId, UpsertCategoryTagsDto upsertCategoryTagsDto)
     {
         Category? category = await dbContext.Categories
-                                      .Include(c => c.CategoryTags)
-                                      .FirstOrDefaultAsync(c => c.Id == categoryId);
+                                            .Include(c => c.CategoryTags)
+                                            .FirstOrDefaultAsync(c => c.Id == categoryId);
 
         if (category is null)
         {
             return NotFound();
         }
 
-        var currentCategoryIds = category.CategoryTags
-                                         .Select(ct => ct.TagId)
-                                         .ToHashSet();
+        var currentCategoryIds = category.CategoryTags.Select(ct => ct.TagId).ToHashSet();
 
         if (currentCategoryIds.SetEquals(upsertCategoryTagsDto.TagIds))
         {
             return NoContent();
         }
 
-        List<string> existingTagIds = await dbContext.Tags
-                                                     .Where(t => upsertCategoryTagsDto.TagIds.Contains(t.Id))
-                                                     .Select(t => t.Id)
-                                                     .ToListAsync();
+        List<string> existingTagIds = await dbContext.Tags.Where(t => upsertCategoryTagsDto.TagIds.Contains(t.Id))
+                                                          .Select(t => t.Id)
+                                                          .ToListAsync();
 
         if (existingTagIds.Count != upsertCategoryTagsDto.TagIds.Count)
         {

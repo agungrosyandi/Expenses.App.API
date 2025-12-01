@@ -4,11 +4,6 @@ using Newtonsoft.Json;
 
 namespace Expenses.App.API.Dtos.Categories;
 
-public sealed record CategoryCollectionDto
-{
-    public List<CategoryDto> Data { get; init; }
-}
-
 public sealed record CategoryDto
 {
     public required string Id { get; init; }

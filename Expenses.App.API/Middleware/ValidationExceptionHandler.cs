@@ -26,10 +26,10 @@ public sealed class ValidationExceptionHandler(IProblemDetailsService problemDet
             }
         };
 
-        var errors = validationException.Errors
-                                        .GroupBy(e => e.PropertyName)
-                                        .ToDictionary(g => g.Key.ToLowerInvariant(),
-                                                      g => g.Select(e => e.ErrorMessage).ToArray());
+        var errors = validationException.Errors.GroupBy(e => e.PropertyName)
+                                               .ToDictionary(g => g.Key.ToLowerInvariant(), g => g.Select(e => e.ErrorMessage)
+                                               .ToArray()
+                                               );
 
         context.ProblemDetails.Extensions.Add("errors", errors);
 

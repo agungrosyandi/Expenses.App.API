@@ -3,6 +3,7 @@ using Expenses.App.API.Database;
 using Expenses.App.API.Dtos.Categories;
 using Expenses.App.API.Dtos.Categories.Mappings;
 using Expenses.App.API.Dtos.Categories.Queries;
+using Expenses.App.API.Dtos.Common;
 using Expenses.App.API.Entities;
 using Expenses.App.API.Models;
 using Expenses.App.API.Services;
@@ -22,12 +23,23 @@ public sealed class CategoryController(ApplicationDbContext dbContext, UserConte
     // ALL CATEGORY
 
     [HttpGet]
-    public async Task<ActionResult<CategoryCollectionDto>> GetCategory([FromQuery] CategoryQueriesParameters query, SortMappingProvider sortMappingProvider)
+    public async Task<ActionResult<PaginationResult<CategoryDto>>> GetCategory([FromQuery] CategoryQueriesParameters query,
+                                                                                           SortMappingProvider sortMappingProvider)
     {
+        // Get the user ID from the UserContext service -----------------
+
+        string? userId = await userContext.GetUserIdAsync();
+
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
+        // -------------------------------------------------------------
+
         if (!sortMappingProvider.ValidateMappings<CategoryDto, Category>(query.Sort))
         {
-            return Problem(statusCode: StatusCodes.Status400BadRequest,
-                           detail: $"The provider sort Parameter isn't valid: {query.Sort}");
+            return Problem(statusCode: StatusCodes.Status400BadRequest, detail: $"The provider sort Parameter isn't valid: {query.Sort}");
         }
 
         // query search --------------------------------------------------
@@ -36,23 +48,31 @@ public sealed class CategoryController(ApplicationDbContext dbContext, UserConte
 
         SortMapping[] sortMappings = sortMappingProvider.GetMappings<CategoryDto, Category>();
 
-        List<CategoryDto> categories = await dbContext
-                                             .Categories
-                                             .Where(c => query.Search == null ||
-                                                    c.Name.ToLower().Contains(query.Search) ||
-                                                    c.Description != null && c.Description.ToLower().Contains(query.Search))
-                                             .ApplySort(query.Sort, sortMappings)
-                                             .Select(CategoryQueries.ProjectToDo())
-                                             .ToListAsync();
+        IQueryable<CategoryDto> categoriesQuery = dbContext.Categories
+                                                           .Where(c => c.UserId == userId)
+                                                           .Where(c => query.Search == null ||
+                                                                  c.Name.ToLower().Contains(query.Search) ||
+                                                                  c.Description != null && c.Description.ToLower().Contains(query.Search))
+                                                           .ApplySort(query.Sort, sortMappings)
+                                                           .Select(CategoryQueries.ProjectToDo());
 
         // -----------------------------------------------------------
 
-        var categoryCollectionDto = new CategoryCollectionDto
-        {
-            Data = categories
-        };
+        //int totalCount = await categoriesQuery.CountAsync();
 
-        return Ok(categoryCollectionDto);
+        //List<CategoryDto> categories = await categoriesQuery.Skip((query.Page - 1) * query.PageSize).Take(query.PageSize).ToListAsync();
+
+        //var paginationResult = new PaginationResult<CategoryDto>
+        //{
+        //    Items = categories,
+        //    Page = query.Page,
+        //    PageSize = query.PageSize,
+        //    TotalCount = totalCount
+        //};
+
+        var paginationResult = await PaginationResult<CategoryDto>.CreateAsync(categoriesQuery, query.Page, query.PageSize);
+
+        return Ok(paginationResult);
     }
 
     // CATEGORY BY ID
@@ -60,8 +80,19 @@ public sealed class CategoryController(ApplicationDbContext dbContext, UserConte
     [HttpGet("{id}")]
     public async Task<ActionResult<CategoryWithTagsDto>> GetCategoryById(string id)
     {
+        // Get the user ID from the UserContext service -----------------
+
+        string? userId = await userContext.GetUserIdAsync();
+
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
+        // -------------------------------------------------------------
+
         CategoryWithTagsDto categories = await dbContext.Categories
-                                                        .Where(c => c.Id == id)
+                                                        .Where(c => c.Id == id && c.UserId == userId)
                                                         .Select(CategoryQueries.ProjectToDtoWithTags())
                                                         .FirstOrDefaultAsync();
 
@@ -78,7 +109,7 @@ public sealed class CategoryController(ApplicationDbContext dbContext, UserConte
     [HttpPost]
     public async Task<ActionResult<CategoryDto>> CreateCategory(CreateCategoryDto createCategoryDto, IValidator<CreateCategoryDto> validator)
     {
-        // validations ----------------------
+        // global validations handling ----------------------
 
         await validator.ValidateAndThrowAsync(createCategoryDto);
 
@@ -91,7 +122,7 @@ public sealed class CategoryController(ApplicationDbContext dbContext, UserConte
             return Unauthorized();
         }
 
-        // process from DTO to Entity -----------------
+        // persist from DTO to Entity -----------------
 
         Category category = createCategoryDto.ToEntity();
 
@@ -100,6 +131,8 @@ public sealed class CategoryController(ApplicationDbContext dbContext, UserConte
         dbContext.Categories.Add(category);
 
         await dbContext.SaveChangesAsync();
+
+        // process from entity to DTO -----------------
 
         CategoryDto categoryDto = category.ToDto();
 
@@ -111,7 +144,18 @@ public sealed class CategoryController(ApplicationDbContext dbContext, UserConte
     [HttpPut("{id}")]
     public async Task<ActionResult> UpdateCategory(string id, UpdateCategoryDto updateCategoryDto)
     {
-        Category? category = await dbContext.Categories.FirstOrDefaultAsync(c => c.Id == id);
+        // Get the user ID from the UserContext service -----------------
+
+        string? userId = await userContext.GetUserIdAsync();
+
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
+        // -------------------------------------------------------------
+
+        Category? category = await dbContext.Categories.FirstOrDefaultAsync(c => c.Id == id && c.UserId == userId);
 
         if (category is null)
         {
@@ -130,7 +174,18 @@ public sealed class CategoryController(ApplicationDbContext dbContext, UserConte
     [HttpDelete("{id}")]
     public async Task<ActionResult> DeleteCategory(string id)
     {
-        Category? category = await dbContext.Categories.FirstOrDefaultAsync(c => c.Id == id);
+        // Get the user ID from the UserContext service -----------------
+
+        string? userId = await userContext.GetUserIdAsync();
+
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
+        // -------------------------------------------------------------
+
+        Category? category = await dbContext.Categories.FirstOrDefaultAsync(c => c.Id == id && c.UserId == userId);
 
         if (category is null)
         {

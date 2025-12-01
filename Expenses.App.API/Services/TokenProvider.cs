@@ -1,7 +1,7 @@
 ﻿using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-using Expenses.App.API.Dtos.Auth;
+using Expenses.App.API.Dtos.Token;
 using Expenses.App.API.Settings;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;

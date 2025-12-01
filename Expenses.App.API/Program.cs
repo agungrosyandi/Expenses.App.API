@@ -13,6 +13,8 @@ builder.AddCorsPolicy()
        .AddSwagger()
        .AddApplicationServices();
 
+//  -------------------------------------------------------------
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -25,7 +27,7 @@ if (app.Environment.IsDevelopment())
     await app.SeedInitialDataAsync();
 }
 
-// Middleware
+// Middleware -------------------------------------------------
 
 app.UseCors("AllowAll");
 
@@ -37,5 +39,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// app running -------------------------------------------------
 
 await app.RunAsync();

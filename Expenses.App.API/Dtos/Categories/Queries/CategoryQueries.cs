@@ -5,7 +5,7 @@ namespace Expenses.App.API.Dtos.Categories.Queries;
 
 internal static class CategoryQueries
 {
-    // category DTO
+    // CATEGORY ENTITY & CATEGORY DTO
 
     public static Expression<Func<Category, CategoryDto>> ProjectToDo()
     {
@@ -19,7 +19,7 @@ internal static class CategoryQueries
         };
     }
 
-    // category with Tag DTO
+    // CATEGORY ENTITY & TAG DTO
 
     public static Expression<Func<Category, CategoryWithTagsDto>> ProjectToDtoWithTags()
     {

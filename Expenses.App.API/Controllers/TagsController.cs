@@ -1,8 +1,10 @@
 ﻿using Expenses.App.API.Database;
-using Expenses.App.API.Dtos.Categories;
+using Expenses.App.API.Dtos.Collections;
+using Expenses.App.API.Dtos.Common;
 using Expenses.App.API.Dtos.Tags;
 using Expenses.App.API.Entities;
 using Expenses.App.API.Models;
+using Expenses.App.API.Services;
 using FluentValidation;
 using FluentValidation.Results;
 using Microsoft.AspNetCore.Authorization;
@@ -14,18 +16,27 @@ namespace Expenses.App.API.Controllers;
 [ApiController]
 [Route("tags")]
 [Authorize(Roles = Roles.Member)]
-public class TagsController(ApplicationDbContext dbContext) : ControllerBase
+public class TagsController(ApplicationDbContext dbContext, UserContext userContext) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<CategoryCollectionDto>> GetTags()
+    public async Task<ActionResult<TagsCollectionDto>> GetTags()
     {
-        List<TagDto> tags = await dbContext.Tags
-                                           .Select(TagQueries.ProjectToDto())
-                                           .ToListAsync();
+        // Get the user ID from the UserContext service -----------------
+
+        string? userId = await userContext.GetUserIdAsync();
+
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
+        // -------------------------------------------------------------
+
+        List<TagDto> tags = await dbContext.Tags.Select(TagQueries.ProjectToDto()).ToListAsync();
 
         var categoryCollectionDto = new TagsCollectionDto
         {
-            Data = tags
+            Items = tags
         };
 
         return Ok(categoryCollectionDto);
@@ -34,10 +45,18 @@ public class TagsController(ApplicationDbContext dbContext) : ControllerBase
     [HttpGet("{id}")]
     public async Task<ActionResult<TagDto>> GetTag(string id)
     {
-        TagDto? tag = await dbContext.Tags
-                                     .Where(c => c.Id == id)
-                                     .Select(TagQueries.ProjectToDto())
-                                     .FirstOrDefaultAsync();
+        // Get the user ID from the UserContext service -----------------
+
+        string? userId = await userContext.GetUserIdAsync();
+
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
+        TagDto? tag = await dbContext.Tags.Where(c => c.Id == id && c.UserId == userId)
+                                          .Select(TagQueries.ProjectToDto())
+                                          .FirstOrDefaultAsync();
 
         if (tag is null)
         {
@@ -50,7 +69,16 @@ public class TagsController(ApplicationDbContext dbContext) : ControllerBase
     [HttpPost]
     public async Task<ActionResult<TagDto>> CreateTag(CreateTagDto createTagDto, IValidator<CreateTagDto> validator)
     {
-        // validations
+        // Get the user ID from the UserContext service -----------------
+
+        string? userId = await userContext.GetUserIdAsync();
+
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
+        // validations ------------------------------------------------
 
         ValidationResult validationResult = await validator.ValidateAsync(createTagDto);
 
@@ -67,10 +95,11 @@ public class TagsController(ApplicationDbContext dbContext) : ControllerBase
 
         Tag tag = createTagDto.ToEntity();
 
+        tag.UserId = userId;
+
         if (await dbContext.Tags.AnyAsync(t => t.Name == tag.Name))
         {
-            return Problem(detail: $"The Tag {tag.Name} already exist",
-                           statusCode: StatusCodes.Status409Conflict);
+            return Problem(detail: $"The Tag {tag.Name} already exist", statusCode: StatusCodes.Status409Conflict);
         }
 
         dbContext.Tags.Add(tag);
@@ -85,7 +114,18 @@ public class TagsController(ApplicationDbContext dbContext) : ControllerBase
     [HttpPut("{id}")]
     public async Task<ActionResult> UpdateTag(string id, UpdateTagDto updateTagDto)
     {
-        Tag? tag = await dbContext.Tags.FirstOrDefaultAsync(t => t.Id == id);
+        // Get the user ID from the UserContext service -----------------
+
+        string? userId = await userContext.GetUserIdAsync();
+
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
+        // -------------------------------------------------------------------------
+
+        Tag? tag = await dbContext.Tags.FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId);
 
         if (tag is null)
         {
@@ -102,7 +142,18 @@ public class TagsController(ApplicationDbContext dbContext) : ControllerBase
     [HttpDelete("{id}")]
     public async Task<ActionResult> DeleteTag(string id)
     {
-        Tag? tag = await dbContext.Tags.FirstOrDefaultAsync(t => t.Id == id);
+        // Get the user ID from the UserContext service -----------------
+
+        string? userId = await userContext.GetUserIdAsync();
+
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
+        // -------------------------------------------------------------------------
+
+        Tag? tag = await dbContext.Tags.FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId);
 
         if (tag is null)
         {

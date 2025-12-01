@@ -10,7 +10,9 @@ public sealed class CategoryConfiguration : IEntityTypeConfiguration<Category>
     public void Configure(EntityTypeBuilder<Category> builder)
     {
         builder.HasKey(c => c.Id);
-        builder.Property(c => c.Id).HasMaxLength(500);
+
+        builder.Property(c => c.Id)
+               .HasMaxLength(500);
 
         builder.Property(c => c.Name)
                .IsRequired()
@@ -22,7 +24,8 @@ public sealed class CategoryConfiguration : IEntityTypeConfiguration<Category>
 
         // foreign key
 
-        builder.Property(c => c.UserId).HasMaxLength(500);
+        builder.Property(c => c.UserId)
+               .HasMaxLength(500);
 
         // relations map
 

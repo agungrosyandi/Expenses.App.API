@@ -30,7 +30,7 @@ internal static class CategoryMapping
         };
     }
 
-    // TO ENTITY
+    // CONVERT CATEGORY DTO TO ENTITY
 
     public static Category ToEntity(this CreateCategoryDto dto)
     {

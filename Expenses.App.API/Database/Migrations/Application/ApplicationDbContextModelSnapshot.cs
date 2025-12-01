@@ -116,6 +116,7 @@ namespace Expenses.App.API.Database.Migrations.Application
 
                     b.Property<string>("UserId")
                         .IsRequired()
+                        .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("user_id");
 

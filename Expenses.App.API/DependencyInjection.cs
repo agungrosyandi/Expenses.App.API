@@ -44,18 +44,10 @@ public static class DependencyInjection
 
     public static WebApplicationBuilder AddServiceIntegrationSupports(this WebApplicationBuilder builder)
     {
-        //builder.Services.AddControllers(options =>
-        //{
-        //    options.ReturnHttpNotAcceptable = true;
-        //})
-        //.AddNewtonsoftJson();
-        //.AddXmlSerializerFormatters();
-
         builder.Services.AddControllers();
         builder.Services.AddEndpointsApiExplorer();
 
         builder.Services.AddValidatorsFromAssemblyContaining<Program>();
-
         builder.Services.AddProblemDetails(options =>
         {
             options.CustomizeProblemDetails = context =>
@@ -63,6 +55,8 @@ public static class DependencyInjection
                 context.ProblemDetails.Extensions.TryAdd("requestId", context.HttpContext.TraceIdentifier);
             };
         });
+
+        // global exception handler ---------------------
 
         builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
         builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -121,7 +115,7 @@ public static class DependencyInjection
 
     public static WebApplicationBuilder AddDatabase(this WebApplicationBuilder builder)
     {
-        //  APPLICATION APP MIGRATION
+        //  application migrations
 
         builder.Services.AddDbContext<ApplicationDbContext>(options =>
         {
@@ -130,7 +124,7 @@ public static class DependencyInjection
                         npgsqlOptions => npgsqlOptions.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schemas.Application)).UseSnakeCaseNamingConvention();
         });
 
-        // IDENTITY APPLICATION MIGRATION
+        // identity migration
 
         builder.Services.AddDbContext<ApplicationIdentityDbContext>(options =>
         {
@@ -146,9 +140,12 @@ public static class DependencyInjection
 
     public static WebApplicationBuilder AddAuthenticationServices(this WebApplicationBuilder builder)
     {
-        builder.Services
-                    .AddIdentity<IdentityUser, IdentityRole>()
-                    .AddEntityFrameworkStores<ApplicationIdentityDbContext>();
+        // add identity
+
+        builder.Services.AddIdentity<IdentityUser, IdentityRole>()
+                        .AddEntityFrameworkStores<ApplicationIdentityDbContext>();
+
+        // jwt bearer
 
         builder.Services.Configure<JwtAuthOptions>(builder.Configuration.GetSection("Jwt"));
 
@@ -169,6 +166,8 @@ public static class DependencyInjection
                             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtAuthOptions.Key))
                         };
                     });
+
+        // authorization
 
         builder.Services.AddAuthorization();
 
